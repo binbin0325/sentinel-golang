@@ -30,11 +30,11 @@ func doTest() {
 
 	_, err = flow.LoadRules([]*flow.Rule{
 		{
-			Resource:        "some-test",
-			MetricType:      flow.QPS,
-			Count:           100,
-			ControlBehavior: flow.WarmUp,
-			WarmUpPeriodSec: 10,
+			Resource:               "some-test",
+			Threshold:              100,
+			TokenCalculateStrategy: flow.WarmUp,
+			ControlBehavior:        flow.Reject,
+			WarmUpPeriodSec:        10,
 		},
 	})
 	if err != nil {
