@@ -3,7 +3,6 @@ package circuitbreaker
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/alibaba/sentinel-golang/logging"
@@ -284,15 +283,13 @@ func rulesFrom(rm map[string][]*Rule) []*Rule {
 	return rules
 }
 
-func logRuleUpdate(rules map[string][]*Rule) {
-	sb := strings.Builder{}
-	sb.WriteString("Circuit breaking rules loaded: [")
-
-	for _, r := range rulesFrom(rules) {
-		sb.WriteString(r.String() + ",")
+func logRuleUpdate(m map[string][]*Rule) {
+	rs := rulesFrom(m)
+	if len(rs) == 0 {
+		logging.Info("[CircuitBreakerRuleManager] Circuit breaking rules were cleared")
+	} else {
+		logging.Info("[CircuitBreakerRuleManager] Circuit breaking rules were loaded", "rules", rs)
 	}
-	sb.WriteString("]")
-	logging.Info(sb.String())
 }
 
 // Note: this function is not thread-safe.
@@ -316,7 +313,7 @@ func SetCircuitBreakerGenerator(s Strategy, generator CircuitBreakerGenFunc) err
 	if generator == nil {
 		return errors.New("nil generator")
 	}
-	if s >= SlowRequestRatio && s <= ErrorCount {
+	if s <= ErrorCount {
 		return errors.New("not allowed to replace the generator for default circuit breaking strategies")
 	}
 	updateMux.Lock()
@@ -327,8 +324,8 @@ func SetCircuitBreakerGenerator(s Strategy, generator CircuitBreakerGenFunc) err
 }
 
 func RemoveCircuitBreakerGenerator(s Strategy) error {
-	if s >= SlowRequestRatio && s <= ErrorCount {
-		return errors.New("not allowed to replace the generator for default circuit breaking strategies")
+	if s <= ErrorCount {
+		return errors.New("not allowed to remove the generator for default circuit breaking strategies")
 	}
 	updateMux.Lock()
 	defer updateMux.Unlock()
@@ -340,9 +337,6 @@ func RemoveCircuitBreakerGenerator(s Strategy) error {
 func IsValid(r *Rule) error {
 	if len(r.Resource) == 0 {
 		return errors.New("empty resource name")
-	}
-	if int(r.Strategy) < int(SlowRequestRatio) || int(r.Strategy) > int(ErrorCount) {
-		return errors.New("invalid Strategy")
 	}
 	if r.StatIntervalMs <= 0 {
 		return errors.New("invalid StatIntervalMs")

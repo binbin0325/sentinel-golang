@@ -5,27 +5,6 @@ import (
 	"fmt"
 )
 
-// MetricType represents the target metric type.
-type MetricType int32
-
-const (
-	// Concurrency represents concurrency count.
-	Concurrency MetricType = iota
-	// QPS represents request count per second.
-	QPS
-)
-
-func (s MetricType) String() string {
-	switch s {
-	case Concurrency:
-		return "Concurrency"
-	case QPS:
-		return "QPS"
-	default:
-		return "Undefined"
-	}
-}
-
 // RelationStrategy indicates the flow control strategy based on the relation of invocations.
 type RelationStrategy int32
 
@@ -83,31 +62,62 @@ func (s ControlBehavior) String() string {
 	}
 }
 
-// Rule describes the strategy of flow control.
+// Rule describes the strategy of flow control, the flow control strategy is based on QPS statistic metric
 type Rule struct {
 	// ID represents the unique ID of the rule (optional).
 	ID string `json:"id,omitempty"`
-
 	// Resource represents the resource name.
 	Resource               string                 `json:"resource"`
-	MetricType             MetricType             `json:"metricType"`
 	TokenCalculateStrategy TokenCalculateStrategy `json:"tokenCalculateStrategy"`
 	ControlBehavior        ControlBehavior        `json:"controlBehavior"`
-	Count                  float64                `json:"count"`
-	RelationStrategy       RelationStrategy       `json:"relationStrategy"`
-	RefResource            string                 `json:"refResource"`
-	MaxQueueingTimeMs      uint32                 `json:"maxQueueingTimeMs"`
-	WarmUpPeriodSec        uint32                 `json:"warmUpPeriodSec"`
-	WarmUpColdFactor       uint32                 `json:"warmUpColdFactor"`
+	// Threshold means the threshold during StatIntervalInMs
+	// If StatIntervalInMs is 1000(1 second), Threshold means QPS
+	Threshold         float64          `json:"threshold"`
+	RelationStrategy  RelationStrategy `json:"relationStrategy"`
+	RefResource       string           `json:"refResource"`
+	MaxQueueingTimeMs uint32           `json:"maxQueueingTimeMs"`
+	WarmUpPeriodSec   uint32           `json:"warmUpPeriodSec"`
+	WarmUpColdFactor  uint32           `json:"warmUpColdFactor"`
+	// StatIntervalInMs indicates the statistic interval and it's the optional setting for flow Rule.
+	// If user doesn't set StatIntervalInMs, that means using default metric statistic of resource.
+	// If the StatIntervalInMs user specifies can not reuse the global statistic of resource,
+	// 		sentinel will generate independent statistic structure for this rule.
+	StatIntervalInMs uint32 `json:"statIntervalInMs"`
+}
+
+func (r *Rule) isEqualsTo(newRule *Rule) bool {
+	if newRule == nil {
+		return false
+	}
+	if !(r.Resource == newRule.Resource && r.RelationStrategy == newRule.RelationStrategy &&
+		r.RefResource == newRule.RefResource && r.StatIntervalInMs == newRule.StatIntervalInMs &&
+		r.TokenCalculateStrategy == newRule.TokenCalculateStrategy && r.ControlBehavior == newRule.ControlBehavior && r.Threshold == newRule.Threshold &&
+		r.MaxQueueingTimeMs == newRule.MaxQueueingTimeMs && r.WarmUpPeriodSec == newRule.WarmUpPeriodSec && r.WarmUpColdFactor == newRule.WarmUpColdFactor) {
+		return false
+	}
+	return true
+}
+
+func (r *Rule) isStatReusable(newRule *Rule) bool {
+	if newRule == nil {
+		return false
+	}
+	return r.Resource == newRule.Resource && r.RelationStrategy == newRule.RelationStrategy &&
+		r.RefResource == newRule.RefResource && r.StatIntervalInMs == newRule.StatIntervalInMs
+}
+
+func (r *Rule) needStatistic() bool {
+	return !(r.TokenCalculateStrategy == Direct && r.ControlBehavior == Throttling)
 }
 
 func (r *Rule) String() string {
 	b, err := json.Marshal(r)
 	if err != nil {
 		// Return the fallback string
-		return fmt.Sprintf("Rule{Resource=%s, MetricType=%s, TokenCalculateStrategy=%s, ControlBehavior=%s, "+
-			"Count=%.2f, RelationStrategy=%s, WarmUpPeriodSec=%d, WarmUpColdFactor=%d, MaxQueueingTimeMs=%d}",
-			r.Resource, r.MetricType, r.TokenCalculateStrategy, r.ControlBehavior, r.Count, r.RelationStrategy, r.WarmUpPeriodSec, r.WarmUpColdFactor, r.MaxQueueingTimeMs)
+		return fmt.Sprintf("Rule{Resource=%s, TokenCalculateStrategy=%s, ControlBehavior=%s, "+
+			"Threshold=%.2f, RelationStrategy=%s, RefResource=%s, MaxQueueingTimeMs=%d, WarmUpPeriodSec=%d, WarmUpColdFactor=%d, StatIntervalInMs=%d}",
+			r.Resource, r.TokenCalculateStrategy, r.ControlBehavior, r.Threshold, r.RelationStrategy, r.RefResource,
+			r.MaxQueueingTimeMs, r.WarmUpPeriodSec, r.WarmUpColdFactor, r.StatIntervalInMs)
 	}
 	return string(b)
 }
