@@ -2,6 +2,7 @@ package flow
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/alibaba/sentinel-golang/core/base"
@@ -28,6 +29,7 @@ var (
 	tcGenFuncMap = make(map[trafficControllerGenKey]TrafficControllerGenFunc)
 	tcMap        = make(TrafficControllerMap)
 	tcMux        = new(sync.RWMutex)
+	currentRules = make([]*Rule, 0)
 )
 
 func init() {
@@ -157,12 +159,16 @@ func onRuleUpdate(rules []*Rule) (err error) {
 		m[res] = buildRulesOfRes(res, rulesOfRes)
 	}
 	tcMap = m
+	currentRules = rules
 	return nil
 }
 
 // LoadRules loads the given flow rules to the rule manager, while all previous rules will be replaced.
 func LoadRules(rules []*Rule) (bool, error) {
 	// TODO: rethink the design
+	if isEqual := reflect.DeepEqual(currentRules, rules); isEqual {
+		return false, nil
+	}
 	err := onRuleUpdate(rules)
 	return true, err
 }
